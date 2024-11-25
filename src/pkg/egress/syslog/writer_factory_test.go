@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"net/url"
 
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/applog"
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -13,8 +14,9 @@ import (
 
 var _ = Describe("EgressFactory", func() {
 	var (
-		f  syslog.WriterFactory
-		sm *metricsHelpers.SpyMetricsRegistry
+		f            syslog.WriterFactory
+		sm           *metricsHelpers.SpyMetricsRegistry
+		appLogStream applog.AppLogStream
 	)
 
 	BeforeEach(func() {
@@ -30,7 +32,7 @@ var _ = Describe("EgressFactory", func() {
 				URL: url,
 			}
 
-			writer, err := f.NewWriter(urlBinding)
+			writer, err := f.NewWriter(urlBinding, appLogStream)
 			Expect(err).ToNot(HaveOccurred())
 
 			retryWriter, ok := writer.(*syslog.RetryWriter)
@@ -49,7 +51,7 @@ var _ = Describe("EgressFactory", func() {
 				URL: url,
 			}
 
-			writer, err := f.NewWriter(urlBinding)
+			writer, err := f.NewWriter(urlBinding, appLogStream)
 			Expect(err).ToNot(HaveOccurred())
 
 			retryWriter, ok := writer.(*syslog.RetryWriter)
@@ -68,7 +70,7 @@ var _ = Describe("EgressFactory", func() {
 				URL: url,
 			}
 
-			writer, err := f.NewWriter(urlBinding)
+			writer, err := f.NewWriter(urlBinding, appLogStream)
 			Expect(err).ToNot(HaveOccurred())
 
 			retryWriter, ok := writer.(*syslog.RetryWriter)
@@ -87,7 +89,7 @@ var _ = Describe("EgressFactory", func() {
 				URL: url,
 			}
 
-			writer, err := f.NewWriter(urlBinding)
+			writer, err := f.NewWriter(urlBinding, appLogStream)
 			Expect(err).ToNot(HaveOccurred())
 
 			retryWriter, ok := writer.(*syslog.RetryWriter)
@@ -106,7 +108,7 @@ var _ = Describe("EgressFactory", func() {
 					Certificate: []byte("invalid-certificate"),
 				}
 
-				_, err = f.NewWriter(urlBinding)
+				_, err = f.NewWriter(urlBinding, appLogStream)
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -120,7 +122,7 @@ var _ = Describe("EgressFactory", func() {
 					PrivateKey: []byte("invalid-private-key"),
 				}
 
-				_, err = f.NewWriter(urlBinding)
+				_, err = f.NewWriter(urlBinding, appLogStream)
 				Expect(err).ToNot(HaveOccurred())
 			})
 		})
@@ -143,7 +145,7 @@ var _ = Describe("EgressFactory", func() {
 				urlBinding.CA = []byte("invalid-ca")
 			}
 
-			_, err = f.NewWriter(urlBinding)
+			_, err = f.NewWriter(urlBinding, appLogStream)
 
 			Expect(err).To(MatchError(expectedErr))
 		},
@@ -169,7 +171,7 @@ var _ = Describe("EgressFactory", func() {
 				AppID: appID,
 			}
 
-			_, err = f.NewWriter(urlBinding)
+			_, err = f.NewWriter(urlBinding, appLogStream)
 			Expect(err).ToNot(HaveOccurred())
 
 			metric := sm.GetMetric("egress", tags)
