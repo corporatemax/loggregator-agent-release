@@ -4,7 +4,6 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log"
-	"net"
 	"net/http"
 	_ "net/http/pprof" //nolint:gosec
 	"os"
@@ -18,15 +17,11 @@ import (
 
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/cache"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/drainvalidation"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/api"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/plumbing"
 	"github.com/go-chi/chi/v5"
 )
-
-type IPChecker interface {
-	ResolveAddr(host string) (net.IP, error)
-	CheckBlacklist(ip net.IP) error
-}
 
 type SyslogBindingCache struct {
 	config       Config
@@ -36,7 +31,6 @@ type SyslogBindingCache struct {
 	metrics      Metrics
 	mu           sync.Mutex
 	appLogStream applog.AppLogStream
-	checker      IPChecker
 }
 
 type Metrics interface {
@@ -71,7 +65,6 @@ func NewSyslogBindingCache(config Config, metrics Metrics, logger *log.Logger) *
 		log:          logger,
 		metrics:      metrics,
 		appLogStream: appLogStream,
-		checker:      &config.Blacklist,
 	}
 }
 
@@ -87,6 +80,7 @@ func (sbc *SyslogBindingCache) Run() {
 	}
 	store := binding.NewStore(sbc.metrics)
 	aggregateStore := binding.NewAggregateStore(sbc.config.AggregateDrainsFile)
+	validator := drainvalidation.NewValidator(&sbc.config.Blacklist, 120*time.Second)
 	poller := binding.NewPoller(
 		sbc.apiClient(),
 		sbc.config.APIPollingInterval,
@@ -94,7 +88,7 @@ func (sbc *SyslogBindingCache) Run() {
 		sbc.metrics,
 		sbc.log,
 		sbc.appLogStream,
-		&sbc.config.Blacklist,
+		validator,
 		sbc.config.WarnOnInvalidDrains,
 	)
 

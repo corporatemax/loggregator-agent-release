@@ -103,13 +103,7 @@ func NewSyslogAgent(
 		)
 
 		cacheClient = cache.NewClient(cfg.Cache.URL, tlsClient)
-		cupsFetcher = bindings.NewFilteredBindingFetcher(
-			&cfg.Cache.Blacklist,
-			bindings.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m, l),
-			m,
-			cfg.WarnOnInvalidDrains,
-			l,
-		)
+		cupsFetcher = bindings.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m, l)
 		cupsFetcher = bindings.NewDrainParamParser(cupsFetcher, cfg.DefaultDrainMetadata)
 	}
 
