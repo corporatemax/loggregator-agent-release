@@ -20,6 +20,7 @@ import (
 	"code.cloudfoundry.org/loggregator-agent-release/src/cmd/syslog-binding-cache/app"
 	"code.cloudfoundry.org/loggregator-agent-release/src/internal/testhelper"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding/blacklist"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/config"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/plumbing"
 )
@@ -47,34 +48,34 @@ var _ = Describe("App", func() {
 	BeforeEach(func() {
 		r := results{
 			{
-				Url: "syslog://drain-a",
+				Url: "syslog://10.0.0.1",
 				Credentials: []binding.Credentials{
 					{
-						Cert: "cert", Key: "key", Apps: []binding.App{{Hostname: "org.space.app-name-1", AppID: "app-id-1"}},
+						Apps: []binding.App{{Hostname: "org.space.app-name-1", AppID: "app-id-1"}},
 					},
 				},
 			},
 			{
-				Url: "syslog://drain-b",
+				Url: "syslog://10.0.0.2",
 				Credentials: []binding.Credentials{
 					{
-						Cert: "cert", Key: "key", Apps: []binding.App{{Hostname: "org.space.app-name-1", AppID: "app-id-1"}},
+						Apps: []binding.App{{Hostname: "org.space.app-name-1", AppID: "app-id-1"}},
 					},
 				},
 			},
 			{
-				Url: "syslog://drain-c",
+				Url: "syslog://10.0.0.3",
 				Credentials: []binding.Credentials{
 					{
-						Cert: "cert", Key: "key", Apps: []binding.App{{Hostname: "org.space.app-name-2", AppID: "app-id-2"}},
+						Apps: []binding.App{{Hostname: "org.space.app-name-2", AppID: "app-id-2"}},
 					},
 				},
 			},
 			{
-				Url: "syslog://drain-d",
+				Url: "syslog://10.0.0.4",
 				Credentials: []binding.Credentials{
 					{
-						Cert: "cert", Key: "key", Apps: []binding.App{{Hostname: "org.space.app-name-2", AppID: "app-id-2"}},
+						Apps: []binding.App{{Hostname: "org.space.app-name-2", AppID: "app-id-2"}},
 					},
 				},
 			},
@@ -196,13 +197,13 @@ var _ = Describe("App", func() {
 
 		Expect(results).To(HaveLen(4))
 		b := findBindings(results, "app-id-1")
-		Expect(b[0].Url).To(Equal("syslog://drain-a"))
-		Expect(b[1].Url).To(Equal("syslog://drain-b"))
+		Expect(b[0].Url).To(Equal("syslog://10.0.0.1"))
+		Expect(b[1].Url).To(Equal("syslog://10.0.0.2"))
 		Expect(b[0].Credentials[0].Apps[0].Hostname).To(Equal("org.space.app-name-1"))
 
 		b = findBindings(results, "app-id-2")
-		Expect(b[0].Url).To(Equal("syslog://drain-c"))
-		Expect(b[1].Url).To(Equal("syslog://drain-d"))
+		Expect(b[0].Url).To(Equal("syslog://10.0.0.3"))
+		Expect(b[1].Url).To(Equal("syslog://10.0.0.4"))
 		Expect(b[0].Credentials[0].Apps[0].Hostname).To(Equal("org.space.app-name-2"))
 	})
 
@@ -268,6 +269,74 @@ var _ = Describe("App", func() {
 				return err
 			}).Should(BeNil())
 			Expect(resp.StatusCode).To(Equal(200))
+		})
+	})
+
+	Context("when IPs are added to the denylist configuration", func() {
+		BeforeEach(func() {
+			capi.results = results{
+				{
+					Url: "syslog://10.10.10.1",
+					Credentials: []binding.Credentials{
+						{
+							Apps: []binding.App{{Hostname: "org.space.app-name-1", AppID: "app-id-1"}},
+						},
+					},
+				},
+				{
+					Url: "syslog://10.10.10.2",
+					Credentials: []binding.Credentials{
+						{
+							Apps: []binding.App{{Hostname: "org.space.app-name-2", AppID: "app-id-2"}},
+						},
+					},
+				},
+			}
+			sbcCfg.Blacklist = blacklist.BlacklistRanges{
+				Ranges: []blacklist.BlacklistRange{
+					{
+						Start: "10.10.10.1",
+						End:   "10.10.10.1",
+					},
+				},
+			}
+		})
+
+		It("does not return blacklisted bindings", func() {
+			addr := fmt.Sprintf("https://localhost:%d/v2/bindings", sbcPort)
+
+			Eventually(func() int {
+				resp, err := client.Get(addr)
+				if err != nil {
+					return 0
+				}
+				defer resp.Body.Close()
+
+				body, err := io.ReadAll(resp.Body)
+				if err != nil {
+					return 0
+				}
+
+				var b []binding.Binding
+				if json.Unmarshal(body, &b) != nil {
+					return 0
+				}
+				return len(b)
+			}).Should(Equal(1))
+
+			resp, err := client.Get(addr)
+			Expect(err).ToNot(HaveOccurred())
+			defer resp.Body.Close()
+
+			body, err := io.ReadAll(resp.Body)
+			Expect(err).ToNot(HaveOccurred())
+
+			var bindings []binding.Binding
+			err = json.Unmarshal(body, &bindings)
+			Expect(err).ToNot(HaveOccurred())
+
+			Expect(bindings).To(HaveLen(1))
+			Expect(bindings[0].Url).To(Equal("syslog://10.10.10.2"))
 		})
 	})
 })

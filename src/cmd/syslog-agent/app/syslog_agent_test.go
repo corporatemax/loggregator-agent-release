@@ -9,11 +9,9 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"strings"
 	"time"
 
-	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding/blacklist"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/applog"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -279,29 +277,6 @@ var _ = Describe("SyslogAgent", func() {
 			time.Sleep(sleepTime)
 
 			Eventually(agentMetrics.GetDebugMetricsEnabled).Should(BeTrue())
-		})
-	})
-
-	Context("when IPs are added to the denylist configuration", func() {
-		BeforeEach(func() {
-			url, err := url.Parse(appHTTPSDrain.server.URL)
-			Expect(err).NotTo(HaveOccurred())
-			agentCfg.Cache.Blacklist = blacklist.BlacklistRanges{
-				Ranges: []blacklist.BlacklistRange{
-					{
-						Start: url.Hostname(),
-						End:   url.Hostname(),
-					},
-				},
-			}
-		})
-
-		It("does not send logs to those IPs", func() {
-			ctx, cancel := context.WithCancel(context.Background())
-			emitLogs(ctx, appIDs, grpcPort, agentCerts)
-			defer cancel()
-
-			Consistently(appHTTPSDrain.receivedMessages, 7).ShouldNot(Receive())
 		})
 	})
 

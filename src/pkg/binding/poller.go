@@ -146,7 +146,7 @@ func (p *Poller) poll() {
 
 	bindingCount := CalculateBindingCount(filteredBindings)
 	p.lastBindingCount.Set(float64(bindingCount))
-	p.store.Set(bindings, bindingCount)
+	p.store.Set(filteredBindings, bindingCount)
 }
 
 func (p *Poller) checkBindings(bindings []Binding) []Binding {

@@ -54,24 +54,21 @@ var _ = Describe("Poller", func() {
 		apiClient.bindings <- response{
 			Results: []Binding{
 				{
-					Url: "drain-0",
+					Url: "syslog://drain-0.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert0", Key: "key0", CA: "ca0", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
-						},
-						{
-							Cert: "cert1", Key: "key1", CA: "ca1", Apps: []App{
+							Apps: []App{
+								{Hostname: "app-hostname0", AppID: "app-id-0"},
 								{Hostname: "app-hostname1", AppID: "app-id-1"},
-								{Hostname: "app-hostname2", AppID: "app-id-2"},
 							},
 						},
 					},
 				},
 				{
-					Url: "drain-1",
+					Url: "syslog://drain-1.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert2", Key: "key2", CA: "ca2", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
+							Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
 						},
 					},
 				},
@@ -85,24 +82,21 @@ var _ = Describe("Poller", func() {
 		Eventually(store.bindings).Should(Receive(&expectedBindings))
 		Expect(expectedBindings).To(ConsistOf([]Binding{
 			{
-				Url: "drain-0",
+				Url: "syslog://drain-0.example.com",
 				Credentials: []Credentials{
 					{
-						Cert: "cert0", Key: "key0", CA: "ca0", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
-					},
-					{
-						Cert: "cert1", Key: "key1", CA: "ca1", Apps: []App{
+						Apps: []App{
+							{Hostname: "app-hostname0", AppID: "app-id-0"},
 							{Hostname: "app-hostname1", AppID: "app-id-1"},
-							{Hostname: "app-hostname2", AppID: "app-id-2"},
 						},
 					},
 				},
 			},
 			{
-				Url: "drain-1",
+				Url: "syslog://drain-1.example.com",
 				Credentials: []Credentials{
 					{
-						Cert: "cert2", Key: "key2", CA: "ca2", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
+						Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
 					},
 				},
 			},
@@ -114,18 +108,18 @@ var _ = Describe("Poller", func() {
 			NextID: 2,
 			Results: []Binding{
 				{
-					Url: "drain-0",
+					Url: "syslog://drain-0.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert0", Key: "key0", CA: "ca0", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
+							Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
 						},
 					},
 				},
 				{
-					Url: "drain-1",
+					Url: "syslog://drain-1.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert1", Key: "key1", CA: "ca1", Apps: []App{{Hostname: "app-hostname1", AppID: "app-id-1"}},
+							Apps: []App{{Hostname: "app-hostname1", AppID: "app-id-1"}},
 						},
 					},
 				},
@@ -135,18 +129,18 @@ var _ = Describe("Poller", func() {
 		apiClient.bindings <- response{
 			Results: []Binding{
 				{
-					Url: "drain-2",
+					Url: "syslog://drain-2.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert2", Key: "key2", CA: "ca2", Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
+							Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
 						},
 					},
 				},
 				{
-					Url: "drain-3",
+					Url: "syslog://drain-3.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert3", Key: "key3", CA: "ca3", Apps: []App{{Hostname: "app-hostname3", AppID: "app-id-3"}},
+							Apps: []App{{Hostname: "app-hostname3", AppID: "app-id-3"}},
 						},
 					},
 				},
@@ -161,34 +155,34 @@ var _ = Describe("Poller", func() {
 		Expect(expectedBindings).To(ConsistOf(
 			[]Binding{
 				{
-					Url: "drain-0",
+					Url: "syslog://drain-0.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert0", Key: "key0", CA: "ca0", Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
+							Apps: []App{{Hostname: "app-hostname0", AppID: "app-id-0"}},
 						},
 					},
 				},
 				{
-					Url: "drain-1",
+					Url: "syslog://drain-1.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert1", Key: "key1", CA: "ca1", Apps: []App{{Hostname: "app-hostname1", AppID: "app-id-1"}},
+							Apps: []App{{Hostname: "app-hostname1", AppID: "app-id-1"}},
 						},
 					},
 				},
 				{
-					Url: "drain-2",
+					Url: "syslog://drain-2.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert2", Key: "key2", CA: "ca2", Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
+							Apps: []App{{Hostname: "app-hostname2", AppID: "app-id-2"}},
 						},
 					},
 				},
 				{
-					Url: "drain-3",
+					Url: "syslog://drain-3.example.com",
 					Credentials: []Credentials{
 						{
-							Cert: "cert3", Key: "key3", CA: "ca3", Apps: []App{{Hostname: "app-hostname3", AppID: "app-id-3"}},
+							Apps: []App{{Hostname: "app-hostname3", AppID: "app-id-3"}},
 						},
 					},
 				},
