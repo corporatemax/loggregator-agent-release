@@ -5,9 +5,11 @@ import (
 	"errors"
 	"log"
 	"net"
+	"time"
 
 	metricsHelpers "code.cloudfoundry.org/go-metric-registry/testhelpers"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding/bindingfakes"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/drainvalidation"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/bindings"
 	. "github.com/onsi/ginkgo/v2"
@@ -32,8 +34,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			{AppId: "app-id-with-good-drain", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "syslog://10.10.10.10"}},
 		}
 		bindingReader := &SpyBindingReader{bindings: input}
+		v := drainvalidation.NewValidator(&spyIPChecker{}, 120*time.Second)
 
-		filter = bindings.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, true, log)
+		filter = bindings.NewFilteredBindingFetcher(v, bindingReader, metrics, true, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).ToNot(HaveOccurred())
@@ -42,8 +45,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 	It("returns an error if the binding reader cannot fetch bindings", func() {
 		bindingReader := &SpyBindingReader{nil, errors.New("Woops")}
+		v := drainvalidation.NewValidator(&spyIPChecker{}, 120*time.Second)
 
-		filter := bindings.NewFilteredBindingFetcher(&spyIPChecker{}, bindingReader, metrics, true, log)
+		filter := bindings.NewFilteredBindingFetcher(v, bindingReader, metrics, true, log)
 		actual, err := filter.FetchBindings()
 
 		Expect(err).To(HaveOccurred())
@@ -64,8 +68,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			input := []syslog.Binding{
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "://"}},
 			}
+			v := drainvalidation.NewValidator(&spyIPChecker{}, 120*time.Second)
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				v,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -108,8 +113,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			input := []syslog.Binding{
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "https:///path"}},
 			}
+			v := drainvalidation.NewValidator(&spyIPChecker{}, 120*time.Second)
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				v,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -163,8 +169,9 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		})
 
 		JustBeforeEach(func() {
+			v := drainvalidation.NewValidator(&spyIPChecker{}, 120*time.Second)
 			filter = bindings.NewFilteredBindingFetcher(
-				&spyIPChecker{},
+				v,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -177,7 +184,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 
 			Expect(err).ToNot(HaveOccurred())
 			Expect(actual).To(Equal(input[:3]))
-			Expect(logBuffer.String()).Should(MatchRegexp("Invalid scheme (.*) in syslog drain url (.*) for application"))
+			Expect(logBuffer.String()).Should(MatchRegexp("Invalid scheme in syslog drain url (.*) for application"))
 			Expect(metrics.GetMetric("invalid_drains", map[string]string{"unit": "total"}).Value()).To(Equal(0.0))
 		})
 		Context("when configured not to warn", func() {
@@ -196,6 +203,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 		var logBuffer bytes.Buffer
 		var warn bool
 		var mockic *bindingfakes.FakeIPChecker
+		var validator *drainvalidation.Validator
 
 		BeforeEach(func() {
 			logBuffer = bytes.Buffer{}
@@ -203,6 +211,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			warn = true
 			mockic = &bindingfakes.FakeIPChecker{}
 			mockic.ResolveAddrReturns(net.IP{}, errors.New("oof ouch ip not resolved"))
+			validator = drainvalidation.NewValidator(mockic, 120*time.Second)
 		})
 
 		JustBeforeEach(func() {
@@ -210,7 +219,7 @@ var _ = Describe("FilteredBindingFetcher", func() {
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "syslog://some.invalid.host"}},
 			}
 			filter = bindings.NewFilteredBindingFetcher(
-				mockic,
+				validator,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,
@@ -270,12 +279,16 @@ var _ = Describe("FilteredBindingFetcher", func() {
 			input := []syslog.Binding{
 				{AppId: "app-id", Hostname: "we.dont.care", Drain: syslog.Drain{Url: "syslog://some.invalid.host"}},
 			}
-
-			filter = bindings.NewFilteredBindingFetcher(
+			v := drainvalidation.NewValidator(
 				&spyIPChecker{
 					checkBlacklistError: errors.New("blacklist error"),
 					resolvedIP:          net.ParseIP("127.0.0.1"),
 				},
+				120*time.Second,
+			)
+
+			filter = bindings.NewFilteredBindingFetcher(
+				v,
 				&SpyBindingReader{bindings: input},
 				metrics,
 				warn,

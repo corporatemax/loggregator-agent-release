@@ -19,6 +19,7 @@ import (
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/cache"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/diodes"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/drainvalidation"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/ingress/bindings"
@@ -103,8 +104,9 @@ func NewSyslogAgent(
 		)
 
 		cacheClient = cache.NewClient(cfg.Cache.URL, tlsClient)
+		validator := drainvalidation.NewValidator(&cfg.Cache.Blacklist, 120*time.Second)
 		cupsFetcher = bindings.NewFilteredBindingFetcher(
-			&cfg.Cache.Blacklist,
+			validator,
 			bindings.NewBindingFetcher(cfg.BindingsPerAppLimit, cacheClient, m, l),
 			m,
 			cfg.WarnOnInvalidDrains,

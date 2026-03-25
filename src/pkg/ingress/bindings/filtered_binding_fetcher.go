@@ -2,16 +2,12 @@ package bindings
 
 import (
 	"log"
-	"net/url"
-	"time"
 
 	metrics "code.cloudfoundry.org/go-metric-registry"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/binding"
+	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/drainvalidation"
 	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/egress/syslog"
-	"code.cloudfoundry.org/loggregator-agent-release/src/pkg/simplecache"
 )
-
-var allowedSchemes = []string{"syslog", "syslog-tls", "https", "https-batch"}
 
 // Metrics is the client used to expose gauge and counter metricsClient.
 type metricsClient interface {
@@ -19,16 +15,15 @@ type metricsClient interface {
 }
 
 type FilteredBindingFetcher struct {
-	ipChecker         binding.IPChecker
+	validator         *drainvalidation.Validator
 	br                binding.Fetcher
 	warn              bool
 	logger            *log.Logger
 	invalidDrains     metrics.Gauge
 	blacklistedDrains metrics.Gauge
-	failedHostsCache  *simplecache.SimpleCache[string, bool]
 }
 
-func NewFilteredBindingFetcher(c binding.IPChecker, b binding.Fetcher, m metricsClient, warn bool, lc *log.Logger) *FilteredBindingFetcher {
+func NewFilteredBindingFetcher(v *drainvalidation.Validator, b binding.Fetcher, m metricsClient, warn bool, lc *log.Logger) *FilteredBindingFetcher {
 	opt := metrics.WithMetricLabels(map[string]string{"unit": "total"})
 
 	invalidDrains := m.NewGauge(
@@ -42,13 +37,12 @@ func NewFilteredBindingFetcher(c binding.IPChecker, b binding.Fetcher, m metrics
 		opt,
 	)
 	return &FilteredBindingFetcher{
-		ipChecker:         c,
+		validator:         v,
 		br:                b,
 		warn:              warn,
 		logger:            lc,
 		invalidDrains:     invalidDrains,
 		blacklistedDrains: blacklistedDrains,
-		failedHostsCache:  simplecache.New[string, bool](120 * time.Second),
 	}
 }
 
@@ -66,48 +60,28 @@ func (f *FilteredBindingFetcher) FetchBindings() ([]syslog.Binding, error) {
 	var invalidDrains float64
 	var blacklistedDrains float64
 	for _, b := range sourceBindings {
-		u, err := url.Parse(b.Drain.Url)
-		if err != nil {
-			invalidDrains += 1
-			f.printWarning("Cannot parse syslog drain url for application %s", b.AppId)
-			continue
-		}
-
-		anonymousUrl := u
-		anonymousUrl.User = nil
-		anonymousUrl.RawQuery = ""
-
-		if invalidScheme(u.Scheme) {
-			f.printWarning("Invalid scheme %s in syslog drain url %s for application %s", u.Scheme, anonymousUrl.String(), b.AppId)
-			continue
-		}
-
-		if len(u.Host) == 0 {
-			invalidDrains += 1
-			f.printWarning("No hostname found in syslog drain url %s for application %s", anonymousUrl.String(), b.AppId)
-			continue
-		}
-
-		_, exists := f.failedHostsCache.Get(u.Host)
-		if exists {
-			invalidDrains += 1
-			f.printWarning("Skipped resolve ip address for syslog drain with url %s for application %s due to prior failure", anonymousUrl.String(), b.AppId)
-			continue
-		}
-
-		ip, err := f.ipChecker.ResolveAddr(u.Host)
-		if err != nil {
-			invalidDrains += 1
-			f.failedHostsCache.Set(u.Host, true)
-			f.printWarning("Cannot resolve ip address for syslog drain with url %s for application %s", anonymousUrl.String(), b.AppId)
-			continue
-		}
-
-		err = f.ipChecker.CheckBlacklist(ip)
-		if err != nil {
-			invalidDrains += 1
-			blacklistedDrains += 1
-			f.printWarning("Resolved ip address for syslog drain with url %s for application %s is blacklisted", anonymousUrl.String(), b.AppId)
+		vErr := f.validator.ValidateURL(b.Drain.Url)
+		if vErr != nil {
+			switch vErr.Reason {
+			case drainvalidation.ReasonParseFailed:
+				invalidDrains++
+				f.printWarning("Cannot parse syslog drain url for application %s", b.AppId)
+			case drainvalidation.ReasonInvalidScheme:
+				f.printWarning("Invalid scheme in syslog drain url %s for application %s", vErr.AnonymousURL, b.AppId)
+			case drainvalidation.ReasonEmptyHost:
+				invalidDrains++
+				f.printWarning("No hostname found in syslog drain url %s for application %s", vErr.AnonymousURL, b.AppId)
+			case drainvalidation.ReasonCachedFailure:
+				invalidDrains++
+				f.printWarning("Skipped resolve ip address for syslog drain with url %s for application %s due to prior failure", vErr.AnonymousURL, b.AppId)
+			case drainvalidation.ReasonResolveFailed:
+				invalidDrains++
+				f.printWarning("Cannot resolve ip address for syslog drain with url %s for application %s", vErr.AnonymousURL, b.AppId)
+			case drainvalidation.ReasonBlacklisted:
+				invalidDrains++
+				blacklistedDrains++
+				f.printWarning("Resolved ip address for syslog drain with url %s for application %s is blacklisted", vErr.AnonymousURL, b.AppId)
+			}
 			continue
 		}
 
@@ -123,14 +97,4 @@ func (f FilteredBindingFetcher) printWarning(format string, v ...any) {
 	if f.warn {
 		f.logger.Printf(format, v...)
 	}
-}
-
-func invalidScheme(scheme string) bool {
-	for _, s := range allowedSchemes {
-		if s == scheme {
-			return false
-		}
-	}
-
-	return true
 }
